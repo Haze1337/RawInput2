@@ -7,5 +7,5 @@ An external software that ports [momentum mod's](https://momentum-mod.org/) ``m_
 * Run the application.
 * Make sure to set ``m_rawinput 2`` in game for it to take effect.
 
-### Building
-* Take the modules (detours.cpp, detours.h, disasm.cpp, modules.cpp) from the [Microsoft Detours](https://github.com/microsoft/Detours) and put them to the "RawInput2/Detours" directory.
+### Building requirements
+* [Microsoft Detours](https://github.com/microsoft/Detours)
