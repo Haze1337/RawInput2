@@ -190,7 +190,7 @@ LRESULT __fastcall Hooked_WindowProc(void* thisptr, void* edx, HWND hwnd, UINT u
 
 void __fastcall Hooked_GetAccumulatedMouseDeltasAndResetAccumulators(void* thisptr, void* edx, float* mx, float* my)
 {
-	return GetAccumulatedMouseDeltasAndResetAccumulators(thisptr, mx, my, mouseMoveFrameTime);
+	GetAccumulatedMouseDeltasAndResetAccumulators(thisptr, mx, my, mouseMoveFrameTime);
 
 	mouseMoveFrameTime = 0.0;
 
