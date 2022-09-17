@@ -5,6 +5,9 @@
 #include "utils.h"
 #include "Detours/detours.h"
 
+IInputSystem* g_InputSystem = nullptr;
+CInput* g_Input = nullptr;
+
 typedef bool(__thiscall* GetRawMouseAccumulatorsFn)(void*, int&, int&);
 typedef LRESULT(__thiscall* WindowProcFn)(void*, HWND, UINT, WPARAM, LPARAM);
 typedef void(__thiscall* GetAccumulatedMouseDeltasAndResetAccumulatorsFn)(void*, float*, float*);
@@ -43,18 +46,11 @@ void UpdateConsole()
 	printf("Use DELETE button to unhook and shutdown RawInput2.\n");
 }
 
-bool GetRawMouseAccumulators(void* thisptr, int& accumX, int& accumY, double frame_split)
+bool GetRawMouseAccumulators(int& accumX, int& accumY, double frame_split)
 {
-	static int* m_mouseRawAccumX;
-	static int* m_mouseRawAccumY;
-	static bool* m_bRawInputSupported;
-
-	if (thisptr != nullptr)
-	{
-		m_mouseRawAccumX = (int*)((uintptr_t)thisptr + 0x119C);
-		m_mouseRawAccumY = (int*)((uintptr_t)thisptr + 0x11A0);
-		m_bRawInputSupported = (bool*)((uintptr_t)thisptr + 0x1198);
-	}
+	static int* m_mouseRawAccumX = (int*)((uintptr_t)g_InputSystem + 0x119C);
+	static int* m_mouseRawAccumY = (int*)((uintptr_t)g_InputSystem + 0x11A0);
+	static bool* m_bRawInputSupported = (bool*)((uintptr_t)g_InputSystem + 0x1198);
 
 	//ConMsg("GetRawMouseAccumulators: %d | %d | %d\n", *(int*)m_mouseRawAccumX, *(int*)m_mouseRawAccumY, *(bool*)m_bRawInputSupported);
 
@@ -110,19 +106,13 @@ bool GetRawMouseAccumulators(void* thisptr, int& accumX, int& accumY, double fra
 	return *(bool*)m_bRawInputSupported;
 }
 
-void GetAccumulatedMouseDeltasAndResetAccumulators(void* thisptr, float* mx, float* my, float frametime)
+void GetAccumulatedMouseDeltasAndResetAccumulators(float* mx, float* my, float frametime)
 {
 	//Assert(mx);
 	//Assert(my);
 
-	static float* m_flAccumulatedMouseXMovement;
-	static float* m_flAccumulatedMouseYMovement;
-
-	if (thisptr != nullptr)
-	{
-		m_flAccumulatedMouseXMovement = (float*)((uintptr_t)thisptr + 0x8);
-		m_flAccumulatedMouseYMovement = (float*)((uintptr_t)thisptr + 0xC);
-	}
+	static float* m_flAccumulatedMouseXMovement = (float*)((uintptr_t)g_Input + 0x8);
+	static float* m_flAccumulatedMouseYMovement = (float*)((uintptr_t)g_Input + 0xC);
 
 	static uintptr_t client = (uintptr_t)GetModuleHandle("client.dll");
 	int m_rawinput = *(int*)(client + 0x4F5EA0);
@@ -137,11 +127,11 @@ void GetAccumulatedMouseDeltasAndResetAccumulators(void* thisptr, float* mx, flo
 			if (m_rawinput == 2 && frametime > 0.0)
 			{
 				m_flMouseSampleTime -= MIN(m_flMouseSampleTime, frametime);
-				GetRawMouseAccumulators(nullptr, rawMouseX, rawMouseY, Plat_FloatTime() - m_flMouseSampleTime);
+				GetRawMouseAccumulators(rawMouseX, rawMouseY, Plat_FloatTime() - m_flMouseSampleTime);
 			}
 			else
 			{
-				GetRawMouseAccumulators(nullptr, rawMouseX, rawMouseY, 0.0);
+				GetRawMouseAccumulators(rawMouseX, rawMouseY, 0.0);
 				m_flMouseSampleTime = 0.0;
 			}
 		}
@@ -166,9 +156,9 @@ void GetAccumulatedMouseDeltasAndResetAccumulators(void* thisptr, float* mx, flo
 
 bool __fastcall Hooked_GetRawMouseAccumulators(void* thisptr, void* edx, int& accumX, int& accumY)
 {
-	return GetRawMouseAccumulators(thisptr, accumX, accumY, 0.0);
+	return GetRawMouseAccumulators(accumX, accumY, 0.0);
 
-	//GetRawMouseAccumulators(thisptr, accumX, accumY, 0.0);
+	//GetRawMouseAccumulators(accumX, accumY, 0.0);
 	//return oGetRawMouseAccumulators(thisptr, accumX, accumY);
 }
 
@@ -190,9 +180,11 @@ LRESULT __fastcall Hooked_WindowProc(void* thisptr, void* edx, HWND hwnd, UINT u
 
 void __fastcall Hooked_GetAccumulatedMouseDeltasAndResetAccumulators(void* thisptr, void* edx, float* mx, float* my)
 {
-	GetAccumulatedMouseDeltasAndResetAccumulators(thisptr, mx, my, mouseMoveFrameTime);
+	GetAccumulatedMouseDeltasAndResetAccumulators(mx, my, mouseMoveFrameTime);
 
 	mouseMoveFrameTime = 0.0;
+
+	//ConMsg("test: %.5f\n", mouseMoveFrameTime);
 
 	//oGetAccumulatedMouseDeltasAndResetAccumulators(thisptr, mx, my);
 }
@@ -213,13 +205,17 @@ void __fastcall Hooked_IN_SetSampleTime(void* thisptr, void* edx, float frametim
 
 DWORD InjectionEntryPoint()
 {
+	auto inputsystem_factory = reinterpret_cast<CreateInterfaceFn>(GetProcAddress(GetModuleHandleA("inputsystem.dll"), "CreateInterface"));
+	g_InputSystem = reinterpret_cast<IInputSystem*>(inputsystem_factory("InputSystemVersion001", nullptr));
+	g_Input = **reinterpret_cast<CInput***>(FindPattern("client.dll", "8B 0D ? ? ? ? 8B 01 FF 60 44") + 2);
+
 	oGetRawMouseAccumulators = (GetRawMouseAccumulatorsFn)(FindPattern("inputsystem.dll", "55 8B EC 8B 45 08 8B 91 9C 11 00 00"));
 	oWindowProc = (WindowProcFn)(FindPattern("inputsystem.dll", "55 8B EC 83 EC 20 57"));
 	oGetAccumulatedMouseDeltasAndResetAccumulators = (GetAccumulatedMouseDeltasAndResetAccumulatorsFn)(FindPattern("client.dll", "55 8B EC 53 8B 5D 0C 56 8B F1 57"));
 	oControllerMove = (ControllerMoveFn)(FindPattern("client.dll", "55 8B EC 56 8B F1 57 8B 7D 0C 80 BE 8C 00 00 00 00"));
-	oIn_SetSampleTime = (In_SetSampleTimeFn)(FindPattern("client.dll", "55 8B EC F3 0F 10 45 08 F3 0F 11 41 1C "));
+	oIn_SetSampleTime = (In_SetSampleTimeFn)(FindPattern("client.dll", "55 8B EC F3 0F 10 45 08 F3 0F 11 41 1C"));
 
-	uintptr_t tier = (uintptr_t)GetModuleHandle("tier0.dll");
+	uintptr_t tier = (uintptr_t)GetModuleHandleA("tier0.dll");
 	ConMsg = (ConMsgFn)(uintptr_t)GetProcAddress((HMODULE)tier, "?ConMsg@@YAXPBDZZ");
 	Plat_FloatTime = (Plat_FloatTimeFn)(uintptr_t)GetProcAddress((HMODULE)tier, "Plat_FloatTime");
 

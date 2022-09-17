@@ -10,6 +10,22 @@ typedef struct BASE_RELOCATION_ENTRY {
 	USHORT Type : 4;
 } BASE_RELOCATION_ENTRY, * PBASE_RELOCATION_ENTRY;
 
+typedef void* (__cdecl* CreateInterface_t)(const char*, int*);
+typedef void* (*CreateInterfaceFn)(const char* pName, int* pReturnCode);
+
+class IInputSystem
+{
+public:
+
+};
+
+class CInput
+{
+public:
+
+};
+
+
 DWORD GetPIDByName(const char* ProcName)
 {
 	PROCESSENTRY32 pe32;
