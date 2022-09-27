@@ -205,6 +205,8 @@ void __fastcall Hooked_IN_SetSampleTime(void* thisptr, void* edx, float frametim
 
 DWORD InjectionEntryPoint()
 {
+	LoadLibraryA("VCRUNTIME140.dll");
+
 	auto inputsystem_factory = reinterpret_cast<CreateInterfaceFn>(GetProcAddress(GetModuleHandleA("inputsystem.dll"), "CreateInterface"));
 	g_InputSystem = reinterpret_cast<IInputSystem*>(inputsystem_factory("InputSystemVersion001", nullptr));
 	g_Input = **reinterpret_cast<CInput***>(FindPattern("client.dll", "8B 0D ? ? ? ? 8B 01 FF 60 44") + 2);
