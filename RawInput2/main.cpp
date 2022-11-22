@@ -35,15 +35,8 @@ float m_flMouseSampleTime;
 
 void Error(char* text)
 {
-	MessageBox(0, text, "ERROR", 16);
+	MessageBoxA(0, text, "ERROR", 16);
 	ExitProcess(0);
-}
-
-void UpdateConsole()
-{
-	system("cls");
-	printf("Set \"m_rawinput 2\" in game for it to take effect.\n");
-	printf("Use DELETE button to unhook and shutdown RawInput2.\n");
 }
 
 bool GetRawMouseAccumulators(int& accumX, int& accumY, double frame_split)
@@ -203,7 +196,15 @@ void __fastcall Hooked_IN_SetSampleTime(void* thisptr, void* edx, float frametim
 	oIn_SetSampleTime(thisptr, frametime);
 }
 
-DWORD InjectionEntryPoint()
+BOOL IsProcessRunning(DWORD processID)
+{
+	HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, processID);
+	DWORD ret = WaitForSingleObject(process, 0);
+	CloseHandle(process);
+	return ret == WAIT_TIMEOUT;
+}
+
+DWORD InjectionEntryPoint(DWORD processID)
 {
 	LoadLibraryA("VCRUNTIME140.dll");
 
@@ -221,7 +222,7 @@ DWORD InjectionEntryPoint()
 	ConMsg = (ConMsgFn)(uintptr_t)GetProcAddress((HMODULE)tier, "?ConMsg@@YAXPBDZZ");
 	Plat_FloatTime = (Plat_FloatTimeFn)(uintptr_t)GetProcAddress((HMODULE)tier, "Plat_FloatTime");
 
-	//ConMsg("Plat_FloatTime: %.5f\n", plat_floattime());
+	//ConMsg("Plat_FloatTime: %.5f\n", Plat_FloatTime());
 
 	DetourTransactionBegin();
 	DetourUpdateThread(GetCurrentThread());
@@ -232,9 +233,10 @@ DWORD InjectionEntryPoint()
 	DetourAttach(&(PVOID&)oIn_SetSampleTime, Hooked_IN_SetSampleTime);
 	DetourTransactionCommit();
 
-	while (!(GetAsyncKeyState(VK_DELETE) & 0x8000))
+	while (IsProcessRunning(processID))
+	//while(FindWindowA(NULL, "CS:S RawInput2") != 0)
 	{
-		Sleep(100);
+		Sleep(1000);
 	}
 
 	DetourTransactionBegin();
@@ -251,7 +253,7 @@ DWORD InjectionEntryPoint()
 }
 
 //Credits: https://www.ired.team/offensive-security/code-injection-process-injection/pe-injection-executing-pes-inside-remote-processes
-void PEInjector(DWORD processID, DWORD Func())
+void PEInjector(DWORD processID, DWORD Func(DWORD))
 {
 	// Get current image's base address
 	PVOID imageBase = GetModuleHandle(NULL);
@@ -297,7 +299,7 @@ void PEInjector(DWORD processID, DWORD Func())
 	WriteProcessMemory(targetProcess, targetImage, localImage, ntHeader->OptionalHeader.SizeOfImage, NULL);
 
 	// Start the injected PE inside the target process
-	CreateRemoteThread(targetProcess, NULL, 0, (LPTHREAD_START_ROUTINE)((DWORD_PTR)Func + deltaImageBase), NULL, 0, NULL);
+	CreateRemoteThread(targetProcess, NULL, 0, (LPTHREAD_START_ROUTINE)((DWORD_PTR)Func + deltaImageBase), (LPVOID)GetCurrentProcessId(), 0, NULL);
 }
 
 //Сredits: https://github.com/alkatrazbhop/BunnyhopAPE
@@ -333,10 +335,12 @@ int main()
 	if (!strstr(cmdLine, " -insecure"))
 		Error("-insecure key is missing!");
 
-	UpdateConsole();
+	system("cls");
+	printf("Set \"m_rawinput 2\" in game for it to take effect.\n");
 
 	PEInjector(processID, InjectionEntryPoint);
 
-	while (!(GetAsyncKeyState(VK_DELETE) & 0x8000)) {}
+
+	while (_getch() != VK_RETURN) {}
 	return false;
 }
